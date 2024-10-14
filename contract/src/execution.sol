@@ -3,58 +3,48 @@ pragma solidity ^0.8.0;
 
 import "./TransactionPool.sol";
 import "./SimpleDEX.sol";
-import "../lib/chainlink-brownie-contracts/contracts/src/v0.8/vrf/VRFConsumerBase.sol";
+import "./Router.sol";
 
-contract TransactionExecutor is VRFConsumerBase {
+contract TransactionExecutor {
+    mapping(uint256 => bool) public blockExecuted;
     TransactionPool public transactionPool;
+    UserTransactionRouter public router;
     SimpleDEX public dex;
 
-    bytes32 internal keyHash;
-    uint256 internal fee;
-    uint256 public randomResult;
-    bool public randomnessReceived;
-
-    TransactionPool.Transaction[] public validTransactions;
-
-    constructor(
-        address _transactionPool,
-        address _dex,
-        address _vrfCoordinator,
-        address _linkToken,
-        bytes32 _keyHash,
-        uint256 _fee
-    ) VRFConsumerBase(_vrfCoordinator, _linkToken) {
+    constructor(address _transactionPool, address _dex, address _router) {
         transactionPool = TransactionPool(_transactionPool);
         dex = SimpleDEX(_dex);
-        keyHash = _keyHash;
-        fee = _fee;
+        router = UserTransactionRouter(_router);
     }
 
-    function requestRandomness() external returns (bytes32 requestId) {
-        require(LINK.balanceOf(address(this)) >= fee, "Not enough LINK");
-        return requestRandomness(keyHash, fee);
-    }
+    function executeTransactions() external {
+        uint256[] memory pendingBlocks = router.getPendingBlocks();
+        require(pendingBlocks.length > 0, "No pending blocks");
 
-    function fulfillRandomness(
-        bytes32 requestId,
-        uint256 randomness
-    ) internal override {
-        randomResult = randomness;
-        randomnessReceived = true;
-        executeTransactions();
-    }
+        uint256 blockToExecute = pendingBlocks[0];
+        require(
+            blockToExecute < block.number - 1,
+            "Cannot execute current or recent blocks"
+        );
 
-    function executeTransactions() internal {
-        require(randomnessReceived, "Randomness not received yet");
+        // 使用下一个区块的哈希作为随机数源
+        uint256 randomness = uint256(blockhash(blockToExecute));
+        require(randomness != 0, "Cannot get block hash");
 
-        // 获取当前区块的交易
+        // 获取要执行的区块的交易
         TransactionPool.Transaction[] memory txs = transactionPool
-            .getTransactions(block.number);
+            .getTransactions(blockToExecute);
 
-        // 使用VRF提供的随机数进行随机排序
+        // 检查是否有交易需要执行
+        if (txs.length == 0) {
+            // 如果没有交易,直接移除这个区块
+            router.removePendingBlock();
+            return;
+        }
+
+        // 使用区块哈希进行随机排序
         for (uint i = txs.length - 1; i > 0; i--) {
-            uint j = uint(keccak256(abi.encodePacked(randomResult, i))) %
-                (i + 1);
+            uint j = uint(keccak256(abi.encodePacked(randomness, i))) % (i + 1);
             (txs[i], txs[j]) = (txs[j], txs[i]);
         }
 
@@ -68,8 +58,10 @@ contract TransactionExecutor is VRFConsumerBase {
         executePriceMonitoringAndArbitrage();
 
         // 清空交易池
-        transactionPool.clearTransactions(block.number);
-        randomnessReceived = false;
+        transactionPool.clearTransactions(blockToExecute);
+
+        // 移除已执行的区块
+        router.removePendingBlock();
     }
 
     function executeDEXOperation(
@@ -77,7 +69,19 @@ contract TransactionExecutor is VRFConsumerBase {
         string memory operationName,
         bytes memory params
     ) internal {
-        if (
+        if (keccak256(bytes(operationName)) == keccak256(bytes("swap"))) {
+            (
+                uint256 amountIn,
+                uint256 amountOutMin,
+                address tokenIn,
+                address tokenOut,
+                address to
+            ) = abi.decode(
+                    params,
+                    (uint256, uint256, address, address, address)
+                );
+            dex.swap(amountIn, amountOutMin, tokenIn, tokenOut, to);
+        } else if (
             keccak256(bytes(operationName)) == keccak256(bytes("addLiquidity"))
         ) {
             (
@@ -108,20 +112,6 @@ contract TransactionExecutor is VRFConsumerBase {
                 address to
             ) = abi.decode(params, (address, address, uint256, address));
             dex.removeLiquidity(token0, token1, liquidity, to);
-        } else if (
-            keccak256(bytes(operationName)) == keccak256(bytes("swap"))
-        ) {
-            (
-                uint256 amountIn,
-                uint256 amountOutMin,
-                address tokenIn,
-                address tokenOut,
-                address to
-            ) = abi.decode(
-                    params,
-                    (uint256, uint256, address, address, address)
-                );
-            dex.swap(amountIn, amountOutMin, tokenIn, tokenOut, to);
         }
     }
 

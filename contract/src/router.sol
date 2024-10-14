@@ -5,31 +5,102 @@ import "./TransactionPool.sol";
 
 contract UserTransactionRouter {
     TransactionPool public transactionPool;
-    uint256 public constant BLOCKS_IN_FUTURE = 5; // 假设交易将在5个区块后执行
     address public dexAddress;
+    uint256[] public pendingBlocks;
 
     constructor(address _transactionPool, address _dexAddress) {
         transactionPool = TransactionPool(_transactionPool);
         dexAddress = _dexAddress;
     }
-
+    //修改参数，更易解析
     function submitDEXOperation(
-        string memory operationName,
-        bytes memory params
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address tokenIn,
+        address tokenOut,
+        address to
     ) external {
-        uint256 targetBlock = block.number + BLOCKS_IN_FUTURE;
+        uint256 currentBlock = block.number;
+        bytes memory params = abi.encode(
+            amountIn,
+            amountOutMin,
+            tokenIn,
+            tokenOut,
+            to
+        );
+
         transactionPool.addTransaction(
-            targetBlock,
+            currentBlock,
             msg.sender,
-            operationName,
+            "swap",
             params
         );
+
+        if (
+            pendingBlocks.length == 0 ||
+            pendingBlocks[pendingBlocks.length - 1] != currentBlock
+        ) {
+            pendingBlocks.push(currentBlock);
+        }
     }
 
-    // 获取特定区块的所有交易
-    function getBlockTransactions(
-        uint256 blockNumber
-    ) external view returns (TransactionPool.Transaction[] memory) {
-        return transactionPool.getTransactions(blockNumber);
+    function getPendingBlocks() external view returns (uint256[] memory) {
+        return pendingBlocks;
+    }
+
+    function removePendingBlock() external {
+        require(
+            msg.sender == address(transactionPool),
+            "Only TransactionPool can remove pending blocks"
+        );
+        if (pendingBlocks.length > 0) {
+            for (uint i = 0; i < pendingBlocks.length - 1; i++) {
+                pendingBlocks[i] = pendingBlocks[i + 1];
+            }
+            pendingBlocks.pop();
+        }
+    }
+
+    function getValidPendingBlocks()
+        public
+        view
+        returns (uint256[] memory validBlocks, uint256[] memory txCounts)
+    {
+        uint256 validCount = 0;
+        for (uint i = 0; i < pendingBlocks.length; i++) {
+            uint256 txCount = transactionPool
+                .getTransactions(pendingBlocks[i])
+                .length;
+            if (txCount > 0) {
+                validCount++;
+            }
+        }
+
+        validBlocks = new uint256[](validCount);
+        txCounts = new uint256[](validCount);
+        uint256 index = 0;
+        for (uint i = 0; i < pendingBlocks.length; i++) {
+            uint256 txCount = transactionPool
+                .getTransactions(pendingBlocks[i])
+                .length;
+            if (txCount > 0) {
+                validBlocks[index] = pendingBlocks[i];
+                txCounts[index] = txCount;
+                index++;
+            }
+        }
+    }
+
+    function getEarliestPendingBlock()
+        external
+        view
+        returns (uint256 blockNumber, uint256 txCount)
+    {
+        (
+            uint256[] memory validBlocks,
+            uint256[] memory txCounts
+        ) = getValidPendingBlocks();
+        require(validBlocks.length > 0, "no valid pending blocks");
+        return (validBlocks[0], txCounts[0]);
     }
 }
