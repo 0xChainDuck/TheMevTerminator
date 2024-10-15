@@ -11,13 +11,25 @@ contract TransactionExecutor {
     UserTransactionRouter public router;
     SimpleDEX public dex;
 
+    mapping(uint256 => address) public dexRouters;
+
+    struct ArbitrageParams {
+        uint256 dexId;
+        address tokenA;
+        address tokenB;
+        uint256 amountIn;
+        uint256 amountOut;
+    }
+
     constructor(address _transactionPool, address _dex, address _router) {
         transactionPool = TransactionPool(_transactionPool);
         dex = SimpleDEX(_dex);
         router = UserTransactionRouter(_router);
     }
 
-    function executeTransactions() external {
+    function executeTransactions(
+        ArbitrageParams[][] memory arbitrageParams
+    ) external {
         uint256[] memory pendingBlocks = router.getPendingBlocks();
         require(pendingBlocks.length > 0, "No pending blocks");
 
@@ -55,7 +67,7 @@ contract TransactionExecutor {
         }
 
         // 监控价格变化并执行套利
-        executePriceMonitoringAndArbitrage();
+        executePriceMonitoringAndArbitrage(arbitrageParams);
 
         // 清空交易池
         transactionPool.clearTransactions(blockToExecute);
@@ -115,10 +127,48 @@ contract TransactionExecutor {
         }
     }
 
-    function executePriceMonitoringAndArbitrage() internal {
-        // TODO: 实现价格监控和套利逻辑
-        // 1. 检查各个交易对的价格
-        // 2. 如果发现套利机会,执行套利交易
-        // 3. 确保套利交易不会对用户产生负面影响
+    function executePriceMonitoringAndArbitrage(
+        ArbitrageParams[][] memory arbitrageParams
+    ) internal {
+        for (uint i = 0; i < arbitrageParams.length; i++) {
+            ArbitrageParams[] memory arbitragePath = arbitrageParams[i];
+
+            // 记录初始余额
+            uint256 initialBalance = IERC20(arbitragePath[0].tokenA).balanceOf(
+                address(this)
+            );
+
+            // 执行套利路径
+            for (uint j = 0; j < arbitragePath.length; j++) {
+                ArbitrageParams memory params = arbitragePath[j];
+                address dexRouter = dexRouters[params.dexId];
+                require(dexRouter != address(0), "Invalid DEX router");
+
+                // 这里假设所有DEX路由器都有相同的swap接口
+                // 如果接口不同，您可能需要为每个DEX实现特定的swap逻辑
+                SimpleDEX(dexRouter).swap(
+                    params.amountIn,
+                    params.amountOut,
+                    params.tokenA,
+                    params.tokenB,
+                    address(this)
+                );
+            }
+
+            // 计算收益
+            uint256 finalBalance = IERC20(arbitragePath[0].tokenA).balanceOf(
+                address(this)
+            );
+            int256 profit = int256(finalBalance) - int256(initialBalance);
+
+            // 这里可以添加记录收益或其他操作的逻辑
+            // 例如：emit ArbitrageProfit(profit);
+        }
+    }
+
+    // 添加或更新DEX路由器地址
+    function setDEXRouter(uint256 dexId, address routerAddress) external {
+        // 添加适当的访问控制
+        dexRouters[dexId] = routerAddress;
     }
 }
