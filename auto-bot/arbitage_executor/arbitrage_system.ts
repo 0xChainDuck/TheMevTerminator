@@ -1,17 +1,20 @@
 import { ethers } from 'ethers';
 import { Pool } from './pool';
-import { SwapOperation, ArbitrageOpportunity } from './types';
+import { SwapOperation, ArbitrageOpportunity, ArbitrageParams } from './types';
+import { PendingBlockMonitor } from './pending_block_monitor';
 
 class ArbitrageSystem {
   private pools: Map<string, Pool> = new Map();
   private provider: ethers.Provider;
   private pairConfigurations: Map<string, string[]> = new Map();
+  private pendingBlockMonitor: PendingBlockMonitor;
 
-  constructor(provider: ethers.Provider, pairConfigurations: Record<string, string[]>) {
+  constructor(provider: ethers.Provider, pairConfigurations: Record<string, string[]>, userTransactionRouterAddress: string) {
     this.provider = provider;
     for (const [baseToken, relatedPairs] of Object.entries(pairConfigurations)) {
       this.pairConfigurations.set(baseToken, relatedPairs);
     }
+    this.pendingBlockMonitor = new PendingBlockMonitor(userTransactionRouterAddress, provider);
   }
 
   async getOrCreatePool(address: string): Promise<Pool> {
@@ -105,6 +108,68 @@ class ArbitrageSystem {
 
     return opportunities;
   }
+
+  async checkAndExecuteArbitrage(): Promise<void> {
+    const pendingOperations = await this.pendingBlockMonitor.getEarliestPendingOperations();
+    
+    if (pendingOperations === null) {
+      console.log('No pending operations found');
+      return;
+    }
+
+    console.log(`Found ${pendingOperations.length} pending operations`);
+    const opportunities = await this.simulateSwapsAndFindArbitrageOpportunities(pendingOperations);
+    
+    if (opportunities.length > 0) {
+      console.log(`Found ${opportunities.length} arbitrage opportunities`);
+      // 这里可以添加执行套利的逻辑
+      await this.executeArbitrageOpportunities(opportunities);
+    } else {
+      console.log('No arbitrage opportunities found');
+    }
+  }
+
+  private async executeArbitrageOpportunities(opportunities: ArbitrageOpportunity[]): Promise<void> {
+    const arbitrageParams: ArbitrageParams[][] = [];
+
+    for (const opportunity of opportunities) {
+      console.log(`Executing arbitrage: Buy ${opportunity.buyAmount} from ${opportunity.buyPool.address}, Sell ${opportunity.sellAmount} to ${opportunity.sellPool.address}, Profit: ${opportunity.profit}`);
+      
+      // Create ArbitrageParams for the buy operation
+      const buyParams: ArbitrageParams = {
+        dexId: opportunity.buyPool.dexId, // You need to implement this function
+        tokenA: opportunity.buyPool.token1.address, // Assuming token1 is the input token
+        tokenB: opportunity.buyPool.token0.address, // Assuming token0 is the output token
+        amountIn: opportunity.buyAmount,
+        amountOut: opportunity.buyAmount // Set a minimum amount out, you may want to adjust this
+      };
+
+      // Create ArbitrageParams for the sell operation
+      const sellParams: ArbitrageParams = {
+        dexId: opportunity.sellPool.dexId, // You need to implement this function
+        tokenA: opportunity.sellPool.token0.address, // Assuming token0 is the input token
+        tokenB: opportunity.sellPool.token1.address, // Assuming token1 is the output token
+        amountIn: opportunity.sellAmount,
+        amountOut: opportunity.sellAmount - opportunity.profit // Set a minimum amount out, accounting for profit
+      };
+
+      arbitrageParams.push([buyParams, sellParams]);
+    }
+
+    // Call the smart contract method to execute the arbitrage
+    await this.executeArbitrageOnChain(arbitrageParams);
+  }
+
+  // You'll need to implement this method to interact with your smart contract
+  private async executeArbitrageOnChain(arbitrageParams: ArbitrageParams[][]): Promise<void> {
+    // Implement the logic to call your smart contract's executeTransactions function
+    // This will depend on how you've set up your contract interaction (e.g., using ethers.js)
+    // For example:
+    // const tx = await this.transactionExecutor.executeTransactions(arbitrageParams);
+    // await tx.wait();
+    console.log("Arbitrage executed on-chain");
+  }
+
 }
 
 // 套利计算函数（从之前的示例中复制）
@@ -153,7 +218,7 @@ async function main() {
     // ... 其他配置
   };
 
-  const arbitrageSystem = new ArbitrageSystem(provider, pairConfigurations);
+  const arbitrageSystem = new ArbitrageSystem(provider, pairConfigurations, "0xUserTransactionRouterAddress");
 
   const swapOperations: SwapOperation[] = [
     {

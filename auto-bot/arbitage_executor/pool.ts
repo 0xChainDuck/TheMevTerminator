@@ -151,9 +151,11 @@ class Pool {
     // 这里可以添加逻辑来根据 factory 地址确定 DEX 名称
     // 例如：
     if (factoryAddress === "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f") {
-      return "Uniswap V2";
+      return "UniswapV2";
     } else if (factoryAddress === "0x1F98431c8aD98523631AE4a59f267346ea31F984") {
-      return "Uniswap V3";
+      return "UniswapV3";
+    } else {
+      return "DuckSwap";
     }
     // 添加更多 DEX 的判断逻辑
     return "Unknown DEX";
