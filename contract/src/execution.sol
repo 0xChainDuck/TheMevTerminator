@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 import "./TransactionPool.sol";
 import "./SimpleDEX.sol";
 import "./Router.sol";
+import "../lib/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 
 contract TransactionExecutor {
     mapping(uint256 => bool) public blockExecuted;
@@ -12,6 +13,8 @@ contract TransactionExecutor {
     SimpleDEX public dex;
 
     mapping(uint256 => address) public dexRouters;
+
+    mapping(uint256 => bool) public isUniswapDex;
 
     struct ArbitrageParams {
         uint256 dexId;
@@ -151,16 +154,32 @@ contract TransactionExecutor {
                 address dexRouter = dexRouters[params.dexId];
                 require(dexRouter != address(0), "Invalid DEX router");
 
-                // 这里假设所有DEX路由器都有相同的swap接口
-                // 如果接口不同，您可能需要为每个DEX实现特定的swap逻辑
-                dex.swap(
-                    address(dex),
-                    params.amountIn,
-                    params.amountOut, // 假设这是最小输出金额
-                    params.tokenA,
-                    params.tokenB,
-                    address(this) // 使用合约地址作为接收者
-                );
+                if (isUniswapDex[params.dexId]) {
+                    // Uniswap风格的swap
+                    IUniswapV2Router02 uniswapRouter = IUniswapV2Router02(
+                        dexRouter
+                    );
+                    address[] memory path = new address[](2);
+                    path[0] = params.tokenA;
+                    path[1] = params.tokenB;
+                    uniswapRouter.swapExactTokensForTokens(
+                        params.amountIn,
+                        params.amountOut, // 最小输出金额
+                        path,
+                        address(this),
+                        block.timestamp
+                    );
+                } else {
+                    // 使用自定义DEX的swap逻辑
+                    dex.swap(
+                        address(dex),
+                        params.amountIn,
+                        params.amountOut, // 最小输出金额
+                        params.tokenA,
+                        params.tokenB,
+                        address(this) // 使用合约地址作为接收者
+                    );
+                }
             }
 
             // 计算收益
@@ -178,5 +197,6 @@ contract TransactionExecutor {
     function setDEXRouter(uint256 dexId, address routerAddress) external {
         // 添加适当的访问控制
         dexRouters[dexId] = routerAddress;
+        isUniswapDex[dexId] = true;
     }
 }
