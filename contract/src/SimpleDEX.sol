@@ -18,6 +18,9 @@ contract SimpleDEX {
     mapping(bytes32 => Pair) public pairs;
     mapping(bytes32 => uint256) public liquidityTokens;
 
+    address public immutable factory;
+    uint24 public constant fee = 3000; // 0.3% 费率，用 3000 表示
+
     event LiquidityAdded(
         address indexed provider,
         uint256 amount0,
@@ -37,6 +40,11 @@ contract SimpleDEX {
         address tokenIn,
         address tokenOut
     );
+
+    // 在构造函数中初始化 factory
+    constructor() {
+        factory = address(this);
+    }
 
     function addLiquidity(
         address token0,
@@ -160,10 +168,14 @@ contract SimpleDEX {
     function getReserves(
         address token0,
         address token1
-    ) public view returns (uint256 reserve0, uint256 reserve1) {
+    )
+        public
+        view
+        returns (uint256 reserve0, uint256 reserve1, uint32 blockTimestampLast)
+    {
         bytes32 pairKey = _getPairKey(token0, token1);
         Pair storage pair = pairs[pairKey];
-        return (pair.reserve0, pair.reserve1);
+        return (pair.reserve0, pair.reserve1, uint32(block.timestamp));
     }
 
     function _getPairKey(
