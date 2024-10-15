@@ -177,39 +177,39 @@ export class ArbitrageSystem {
 
 // 套利计算函数（从之前的示例中复制）
 function calculateOptimalArbitrage(pool1: Pool, pool2: Pool): ArbitrageOpportunity {
-    // 确保 pool1 是价格较低的池
-    let lowPool = pool1;
-    let highPool = pool2;
-    if (pool1.calculatePrice() > pool2.calculatePrice()) {
-      lowPool = pool2;
-      highPool = pool1;
-    }
-  
-    const x1 = lowPool.reserves.reserve0;
-    const y1 = lowPool.reserves.reserve1;
-    const x2 = highPool.reserves.reserve0;
-    const y2 = highPool.reserves.reserve1;
-  
-    // 计算最优套利量
-    const ratio = Number(y1) * Number(x2) / (Number(y2) * Number(x1));
-    const sqrtTerm = Math.sqrt(Number(x1) * Number(x2) * (ratio + 1) ** 2);
-    const deltaX = BigInt(Math.floor((sqrtTerm - Number(x1)) / (ratio + 1)));
-  
-    // 模拟套利操作
-    lowPool.resetSimulation();
-    highPool.resetSimulation();
-    const boughtAmount = lowPool.simulateBuy(deltaX);
-    const soldAmount = highPool.simulateSell(boughtAmount);
-  
-    return {
-      buyPool: lowPool,
-      sellPool: highPool,
-      buyAmount: deltaX,
-      buyAmountOutMin:boughtAmount,
-      sellAmount: boughtAmount,
-      sellAmountOutMin:soldAmount,
-      profit: soldAmount - deltaX
-    };
+  // 确保 pool1 是价格较低的池
+  let lowPool = pool1;
+  let highPool = pool2;
+  if (pool1.calculatePrice() > pool2.calculatePrice()) {
+    lowPool = pool2;
+    highPool = pool1;
   }
+  
+  const x1 = lowPool.reserves.reserve0;
+  const y1 = lowPool.reserves.reserve1;
+  const x2 = highPool.reserves.reserve0;
+  const y2 = highPool.reserves.reserve1;
+  
+  // 计算最优套利量
+  const ratio = Number(y1) * Number(x2) / (Number(y2) * Number(x1));
+  const sqrtTerm = Math.sqrt(Number(x1) * Number(x2) * (ratio + 1) ** 2);
+  const deltaX = BigInt(Math.floor((sqrtTerm - Number(x1)) / (ratio + 1)));
+  
+  // 模拟套利操作
+  lowPool.resetSimulation();
+  highPool.resetSimulation();
+  const boughtAmount = lowPool.simulateBuy(deltaX);
+  const soldAmount = highPool.simulateSell(boughtAmount);
+  
+  return {
+    buyPool: lowPool,
+    sellPool: highPool,
+    buyAmount: deltaX,
+    buyAmountOutMin: boughtAmount,
+    sellAmount: boughtAmount,
+    sellAmountOutMin: soldAmount,
+    profit: soldAmount - deltaX
+  };
+}
   
 
