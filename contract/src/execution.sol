@@ -92,7 +92,14 @@ contract TransactionExecutor {
                     params,
                     (uint256, uint256, address, address, address)
                 );
-            dex.swap(amountIn, amountOutMin, tokenIn, tokenOut, to);
+            dex.swap(
+                address(dex),
+                amountIn,
+                amountOutMin,
+                tokenIn,
+                tokenOut,
+                to
+            );
         } else if (
             keccak256(bytes(operationName)) == keccak256(bytes("addLiquidity"))
         ) {
@@ -146,12 +153,13 @@ contract TransactionExecutor {
 
                 // 这里假设所有DEX路由器都有相同的swap接口
                 // 如果接口不同，您可能需要为每个DEX实现特定的swap逻辑
-                SimpleDEX(dexRouter).swap(
+                dex.swap(
+                    address(dex),
                     params.amountIn,
-                    params.amountOut,
+                    params.amountOut, // 假设这是最小输出金额
                     params.tokenA,
                     params.tokenB,
-                    address(this)
+                    address(this) // 使用合约地址作为接收者
                 );
             }
 

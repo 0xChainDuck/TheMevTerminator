@@ -109,6 +109,7 @@ contract SimpleDEX {
     }
 
     function swap(
+        address pairAddress,
         uint256 amountIn,
         uint256 amountOutMin,
         address tokenIn,
@@ -120,39 +121,49 @@ contract SimpleDEX {
 
         require(
             tokenIn == address(pair.token0) || tokenIn == address(pair.token1),
-            "Invalid token"
+            "Invalid tokenIn"
         );
+        require(
+            tokenOut == address(pair.token0) ||
+                tokenOut == address(pair.token1),
+            "Invalid tokenOut"
+        );
+        require(tokenIn != tokenOut, "tokenIn and tokenOut must be different");
 
         bool isToken0 = tokenIn == address(pair.token0);
-        (
-            IERC20 tokenInContract,
-            IERC20 tokenOutContract,
-            uint256 reserveIn,
-            uint256 reserveOut
-        ) = isToken0
-                ? (pair.token0, pair.token1, pair.reserve0, pair.reserve1)
-                : (pair.token1, pair.token0, pair.reserve1, pair.reserve0);
+        (uint256 reserveIn, uint256 reserveOut) = isToken0
+            ? (pair.reserve0, pair.reserve1)
+            : (pair.reserve1, pair.reserve0);
 
-        tokenInContract.safeTransferFrom(msg.sender, address(this), amountIn);
+        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
 
         uint256 amountInWithFee = amountIn * 997;
-        uint256 numerator = amountInWithFee * reserveOut;
-        uint256 denominator = (reserveIn * 1000) + amountInWithFee;
-        amountOut = numerator / denominator;
-
+        amountOut =
+            (amountInWithFee * reserveOut) /
+            ((reserveIn * 1000) + amountInWithFee);
         require(amountOut >= amountOutMin, "Insufficient output amount");
 
         if (isToken0) {
             pair.reserve0 += amountIn;
             pair.reserve1 -= amountOut;
+            pair.token1.safeTransfer(to, amountOut);
         } else {
             pair.reserve1 += amountIn;
             pair.reserve0 -= amountOut;
+            pair.token0.safeTransfer(to, amountOut);
         }
 
-        tokenOutContract.safeTransfer(to, amountOut);
+        emit Swap(msg.sender, amountIn, amountOut, tokenIn, tokenOut);
+        return amountOut;
+    }
 
-        emit Swap(to, amountIn, amountOut, tokenIn, tokenOut);
+    function getReserves(
+        address token0,
+        address token1
+    ) public view returns (uint256 reserve0, uint256 reserve1) {
+        bytes32 pairKey = _getPairKey(token0, token1);
+        Pair storage pair = pairs[pairKey];
+        return (pair.reserve0, pair.reserve1);
     }
 
     function _getPairKey(
