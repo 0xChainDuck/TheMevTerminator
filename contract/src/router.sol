@@ -149,11 +149,28 @@ contract UserTransactionRouter {
         require(blockInfos.length > 0, "no valid pending blocks");
 
         PendingBlockInfo memory earliestBlock = blockInfos[0];
-        for (uint i = 1; i < blockInfos.length; i++) {
-            if (blockInfos[i].blockNumber < earliestBlock.blockNumber) {
-                earliestBlock = blockInfos[i];
-            }
+
+        // 使用区块哈希作为随机数源
+        uint256 randomness = uint256(blockhash(earliestBlock.blockNumber));
+        require(randomness != 0, "cannot get block hash");
+
+        // 打乱交易顺序
+        SwapParams[] memory shuffledSwapParams = new SwapParams[](
+            earliestBlock.swapParams.length
+        );
+        for (uint i = 0; i < earliestBlock.swapParams.length; i++) {
+            shuffledSwapParams[i] = earliestBlock.swapParams[i];
         }
+
+        for (uint i = shuffledSwapParams.length - 1; i > 0; i--) {
+            uint j = uint(keccak256(abi.encodePacked(randomness, i))) % (i + 1);
+            (shuffledSwapParams[i], shuffledSwapParams[j]) = (
+                shuffledSwapParams[j],
+                shuffledSwapParams[i]
+            );
+        }
+
+        earliestBlock.swapParams = shuffledSwapParams;
 
         return earliestBlock;
     }
