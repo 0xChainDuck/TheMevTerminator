@@ -90,13 +90,15 @@ contract TransactionExecutor {
                 uint256 amountOutMin,
                 address tokenIn,
                 address tokenOut,
-                address to
+                address to,
+                address pool // 解码 pool 参数
             ) = abi.decode(
                     params,
-                    (uint256, uint256, address, address, address)
+                    (uint256, uint256, address, address, address, address)
                 );
-            dex.swap(
-                address(dex),
+            // 使用 pool 参数进行 swap 操作
+            SimpleDEX(pool).swap(
+                pool,
                 amountIn,
                 amountOutMin,
                 tokenIn,

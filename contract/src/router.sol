@@ -14,6 +14,7 @@ contract UserTransactionRouter {
         address tokenIn;
         address tokenOut;
         address to;
+        address pool; // 添加 pool 字段
     }
 
     struct PendingBlockInfo {
@@ -32,7 +33,8 @@ contract UserTransactionRouter {
         uint256 amountOutMin,
         address tokenIn,
         address tokenOut,
-        address to
+        address to,
+        address pool
     ) external {
         uint256 currentBlock = block.number;
         bytes memory params = abi.encode(
@@ -40,7 +42,8 @@ contract UserTransactionRouter {
             amountOutMin,
             tokenIn,
             tokenOut,
-            to
+            to,
+            pool
         );
 
         transactionPool.addTransaction(
@@ -111,17 +114,26 @@ contract UserTransactionRouter {
                             uint256 amountOutMin,
                             address tokenIn,
                             address tokenOut,
-                            address to
+                            address to,
+                            address pool // 解码 pool 参数
                         ) = abi.decode(
                                 txs[j].params,
-                                (uint256, uint256, address, address, address)
+                                (
+                                    uint256,
+                                    uint256,
+                                    address,
+                                    address,
+                                    address,
+                                    address
+                                )
                             );
                         swapParamsArray[swapCount] = SwapParams(
                             amountIn,
                             amountOutMin,
                             tokenIn,
                             tokenOut,
-                            to
+                            to,
+                            pool // 包含 pool 参数
                         );
                         swapCount++;
                     }
