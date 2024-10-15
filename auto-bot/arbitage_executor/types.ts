@@ -32,3 +32,11 @@ export interface TokenInfo {
   decimals: number;
 }
 
+// Add this interface to your types.ts file or in this file
+interface ArbitrageParams {
+    dexId: number;
+    tokenA: string;
+    tokenB: string;
+    amountIn: bigint;
+    amountOut: bigint;
+  }
