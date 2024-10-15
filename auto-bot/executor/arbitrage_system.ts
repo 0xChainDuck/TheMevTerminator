@@ -2,19 +2,28 @@ import { ethers } from 'ethers';
 import { Pool } from './pool';
 import { SwapOperation, ArbitrageOpportunity, ArbitrageParams } from './types';
 import { PendingBlockMonitor } from './pending_block_monitor';
-
-class ArbitrageSystem {
+import { TransactionExecutor } from './transaction_executor';
+import { ArbitrageConfig } from './config';
+export class ArbitrageSystem {
   private pools: Map<string, Pool> = new Map();
   private provider: ethers.Provider;
   private pairConfigurations: Map<string, string[]> = new Map();
   private pendingBlockMonitor: PendingBlockMonitor;
+  private transactionExecutor: TransactionExecutor;
 
-  constructor(provider: ethers.Provider, pairConfigurations: Record<string, string[]>, userTransactionRouterAddress: string) {
+  constructor(
+    provider: ethers.Provider,
+    signer: ethers.Signer,
+    pairConfigurations: ArbitrageConfig,
+    userTransactionRouterAddress: string,
+    transactionExecutorAddress: string
+  ) {
     this.provider = provider;
-    for (const [baseToken, relatedPairs] of Object.entries(pairConfigurations)) {
-      this.pairConfigurations.set(baseToken, relatedPairs);
+    for (const pair of pairConfigurations.pairs) {
+      this.pairConfigurations.set(pair.baseToken, pair.relatedPairs);
     }
     this.pendingBlockMonitor = new PendingBlockMonitor(userTransactionRouterAddress, provider);
+    this.transactionExecutor = new TransactionExecutor(transactionExecutorAddress, signer);
   }
 
   async getOrCreatePool(address: string): Promise<Pool> {
@@ -137,39 +146,33 @@ class ArbitrageSystem {
       
       // Create ArbitrageParams for the buy operation
       const buyParams: ArbitrageParams = {
-        dexId: opportunity.buyPool.dexId, // You need to implement this function
-        tokenA: opportunity.buyPool.token1.address, // Assuming token1 is the input token
-        tokenB: opportunity.buyPool.token0.address, // Assuming token0 is the output token
+        dexId: opportunity.buyPool.dexId,
+        tokenA: opportunity.buyPool.token1.address,
+        tokenB: opportunity.buyPool.token0.address,
         amountIn: opportunity.buyAmount,
-        amountOut: opportunity.buyAmount // Set a minimum amount out, you may want to adjust this
+        amountOut: opportunity.buyAmountOutMin
       };
 
       // Create ArbitrageParams for the sell operation
       const sellParams: ArbitrageParams = {
-        dexId: opportunity.sellPool.dexId, // You need to implement this function
-        tokenA: opportunity.sellPool.token0.address, // Assuming token0 is the input token
-        tokenB: opportunity.sellPool.token1.address, // Assuming token1 is the output token
+        dexId: opportunity.sellPool.dexId,
+        tokenA: opportunity.sellPool.token0.address,
+        tokenB: opportunity.sellPool.token1.address,
         amountIn: opportunity.sellAmount,
-        amountOut: opportunity.sellAmount - opportunity.profit // Set a minimum amount out, accounting for profit
+        amountOut: opportunity.sellAmountOutMin
       };
 
       arbitrageParams.push([buyParams, sellParams]);
     }
 
-    // Call the smart contract method to execute the arbitrage
-    await this.executeArbitrageOnChain(arbitrageParams);
+    // Call the TransactionExecutor to execute the arbitrage
+    try {
+      const receipt = await this.transactionExecutor.executeArbitrage(arbitrageParams);
+      console.log(`Arbitrage executed successfully in block ${receipt.blockNumber}`);
+    } catch (error) {
+      console.error('Failed to execute arbitrage:', error);
+    }
   }
-
-  // You'll need to implement this method to interact with your smart contract
-  private async executeArbitrageOnChain(arbitrageParams: ArbitrageParams[][]): Promise<void> {
-    // Implement the logic to call your smart contract's executeTransactions function
-    // This will depend on how you've set up your contract interaction (e.g., using ethers.js)
-    // For example:
-    // const tx = await this.transactionExecutor.executeTransactions(arbitrageParams);
-    // await tx.wait();
-    console.log("Arbitrage executed on-chain");
-  }
-
 }
 
 // 套利计算函数（从之前的示例中复制）
@@ -202,51 +205,11 @@ function calculateOptimalArbitrage(pool1: Pool, pool2: Pool): ArbitrageOpportuni
       buyPool: lowPool,
       sellPool: highPool,
       buyAmount: deltaX,
+      buyAmountOutMin:boughtAmount,
       sellAmount: boughtAmount,
+      sellAmountOutMin:soldAmount,
       profit: soldAmount - deltaX
     };
   }
   
 
-// 使用示例
-async function main() {
-  const provider = new ethers.JsonRpcProvider("YOUR_RPC_URL");
-
-  const pairConfigurations = {
-    "0xTokenA": ["0xPool1", "0xPool2", "0xPool3"],
-    "0xTokenB": ["0xPool2", "0xPool4", "0xPool5"],
-    // ... 其他配置
-  };
-
-  const arbitrageSystem = new ArbitrageSystem(provider, pairConfigurations, "0xUserTransactionRouterAddress");
-
-  const swapOperations: SwapOperation[] = [
-    {
-      tokenIn: "0xTokenA",
-      tokenOut: "0xTokenB",
-      amountIn: BigInt(1000000),
-      amountOutMin: BigInt(990000),
-      pool: "0xPool1"
-    },
-    {
-      tokenIn: "0xTokenB",
-      tokenOut: "0xTokenC",
-      amountIn: BigInt(500000),
-      amountOutMin: BigInt(495000),
-      pool: "0xPool1"
-    },
-    // ... 其他操作
-  ];
-
-  const opportunities = await arbitrageSystem.simulateSwapsAndFindArbitrageOpportunities(swapOperations);
-
-  console.log("Arbitrage opportunities:");
-  opportunities.forEach((op, index) => {
-    console.log(`Opportunity ${index + 1}:`);
-    console.log(`  Buy ${op.buyAmount} from ${op.buyPool.address}`);
-    console.log(`  Sell ${op.sellAmount} to ${op.sellPool.address}`);
-    console.log(`  Profit: ${op.profit}`);
-  });
-}
-
-main().catch(console.error);

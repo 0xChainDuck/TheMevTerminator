@@ -26,7 +26,7 @@ export class PendingBlockMonitor {
         tokenOut: param.tokenOut,
         amountIn: BigInt(param.amountIn.toString()),
         amountOutMin: BigInt(param.amountOutMin.toString()),
-        pool: param.to // 假设 'to' 字段是交易对的地址
+        pool: param.pool // 假设 'to' 字段是交易对的地址
       }));
     } catch (error) {
       console.error('Error fetching earliest pending block:', error);
