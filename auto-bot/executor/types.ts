@@ -12,7 +12,9 @@ export interface ArbitrageOpportunity {
   buyPool: Pool;       // 买入操作的池子
   sellPool: Pool;      // 卖出操作的池子
   buyAmount: bigint;   // 买入数量
+  buyAmountOutMin: bigint; // 买入最小数量
   sellAmount: bigint;  // 卖出数量
+  sellAmountOutMin: bigint; // 卖出最小数量
   profit: bigint;      // 预期利润
 }
 
@@ -33,7 +35,7 @@ export interface TokenInfo {
 }
 
 // Add this interface to your types.ts file or in this file
-interface ArbitrageParams {
+export interface ArbitrageParams {
     dexId: number;
     tokenA: string;
     tokenB: string;

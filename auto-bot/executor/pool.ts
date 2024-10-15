@@ -16,7 +16,7 @@ const PAIR_ABI = [
   "function fee() view returns (uint24)"  // 注意：不是所有的池都有这个方法
 ];
 
-class Pool {
+export class Pool {
   private provider: ethers.Provider;
   private pairContract: ethers.Contract;
   private token0Contract: ethers.Contract;
@@ -24,7 +24,7 @@ class Pool {
 
   public address: string;
   public factory: string;
-  public dexName: string;
+  public dexId: number;
   public token0: { address: string; symbol: string; decimals: number };
   public token1: { address: string; symbol: string; decimals: number };
   public reserves: { reserve0: bigint; reserve1: bigint };
@@ -38,7 +38,7 @@ class Pool {
     
     // 初始化其他成员
     this.factory = '';
-    this.dexName = '';
+    this.dexId = 0;
     this.token0 = { address: '', symbol: '', decimals: 0 };
     this.token1 = { address: '', symbol: '', decimals: 0 };
     this.reserves = { reserve0: 0n, reserve1: 0n };
@@ -55,7 +55,7 @@ class Pool {
     this.factory = await this.pairContract.factory();
 
     // 这里可以添加逻辑来根据 factory 地址确定 DEX 名称和版本
-    this.dexName = this.determineDexName(this.factory);
+    this.dexId = this.determineDexId(this.factory);
 
     // 获取 token0 和 token1 地址
     const token0Address = await this.pairContract.token0();
@@ -147,18 +147,14 @@ class Pool {
     return price * decimalAdjustment;
   }
 
-  private determineDexName(factoryAddress: string): string {
-    // 这里可以添加逻辑来根据 factory 地址确定 DEX 名称
-    // 例如：
+  private determineDexId(factoryAddress: string): number {
     if (factoryAddress === "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f") {
-      return "UniswapV2";
+      return 1;
     } else if (factoryAddress === "0x1F98431c8aD98523631AE4a59f267346ea31F984") {
-      return "UniswapV3";
+      return 2;
     } else {
-      return "DuckSwap";
+      return 0;
     }
-    // 添加更多 DEX 的判断逻辑
-    return "Unknown DEX";
   }
 
   calculateBuyAmount(amountIn: bigint): bigint {
